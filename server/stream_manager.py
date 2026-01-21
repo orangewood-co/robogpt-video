@@ -138,7 +138,7 @@ class StreamManager:
 
     def get_stream_generator(self, name: str) -> Generator[bytes, None, None]:
         """
-        Get an MJPEG stream generator for a stream.
+        Get an MJPEG stream generator for a stream with reduced latency.
 
         Args:
             name: Stream name
@@ -146,6 +146,8 @@ class StreamManager:
         Yields:
             MJPEG multipart frames
         """
+        import time
+
         logger.info(f"Starting stream generator for: {name}")
 
         # Increment viewer count
@@ -153,17 +155,35 @@ class StreamManager:
             if name in self._streams:
                 self._streams[name].viewer_count += 1
 
+        last_frame_id = 0
+        frame_delay = 0.033  # ~30 FPS max for viewers
+
         try:
             while True:
-                frame = self.get_current_frame(name)
+                with self._lock:
+                    if name not in self._streams:
+                        break
+
+                    stream = self._streams[name]
+                    current_frame_id = stream.total_frames
+
+                    # Only send if we have a new frame
+                    if current_frame_id > last_frame_id and stream.current_frame:
+                        frame = stream.current_frame
+                        last_frame_id = current_frame_id
+                    else:
+                        frame = None
+
                 if frame:
                     yield (b'--frame\r\n'
-                           b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-                else:
-                    # Stream doesn't exist or no frame yet
-                    # Send a small delay to prevent tight loop
-                    import time
-                    time.sleep(0.1)
+                           b'Content-Type: image/jpeg\r\n'
+                           b'Cache-Control: no-cache, no-store, must-revalidate\r\n'
+                           b'Pragma: no-cache\r\n'
+                           b'Expires: 0\r\n\r\n' + frame + b'\r\n')
+
+                # Small delay to prevent overwhelming the client
+                # This limits viewer FPS to ~30 even if publisher sends more
+                time.sleep(frame_delay)
 
         finally:
             # Decrement viewer count when generator stops
