@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  video-server:
+    build: .
+    container_name: robogpt-video
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./recordings:/app/recordings
+      - ./logs:/app/logs
+      - ./config.yaml:/app/config.yaml
+    environment:
+      - LOG_LEVEL=INFO
+      - STREAM_TIMEOUT_SECONDS=300
+      - MAX_CONCURRENT_STREAMS=50
+      - RECORDING_RETENTION_DAYS=7
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

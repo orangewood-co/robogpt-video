@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RoboGPT Video Streaming Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 12px 30px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        .video-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+
+        .video-card {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+
+        .video-card img {
+            width: 100%;
+            height: auto;
+            display: block;
+            background: #000;
+        }
+
+        .video-info {
+            padding: 15px;
+        }
+
+        .video-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        .video-status {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #4caf50;
+            border-radius: 50%;
+            margin-right: 5px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .error {
+            background: #f44336;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎥 RoboGPT Video Streaming Viewer</h1>
+
+        <div class="controls">
+            <div class="input-group">
+                <input type="text" id="serverUrl" placeholder="Server URL (e.g., http://localhost:5000)" value="http://localhost:5000">
+                <button onclick="loadStreams()">🔄 Refresh Streams</button>
+            </div>
+            <div class="input-group">
+                <input type="text" id="streamName" placeholder="Stream name (e.g., webcam)">
+                <button onclick="addStream()">➕ Add Stream</button>
+            </div>
+            <div id="error" style="display: none;" class="error"></div>
+        </div>
+
+        <div id="videoGrid" class="video-grid"></div>
+    </div>
+
+    <script>
+        const streams = new Set();
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        function getServerUrl() {
+            return document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
+        }
+
+        function addStream() {
+            const streamName = document.getElementById('streamName').value.trim();
+            if (!streamName) {
+                showError('Please enter a stream name');
+                return;
+            }
+
+            if (streams.has(streamName)) {
+                showError('Stream already added');
+                return;
+            }
+
+            createStreamCard(streamName);
+            document.getElementById('streamName').value = '';
+        }
+
+        function createStreamCard(streamName) {
+            streams.add(streamName);
+            const grid = document.getElementById('videoGrid');
+            const serverUrl = getServerUrl();
+
+            const card = document.createElement('div');
+            card.className = 'video-card';
+            card.id = `stream-${streamName}`;
+
+            card.innerHTML = `
+                <img src="${serverUrl}/stream/${streamName}" alt="${streamName}" onerror="handleImageError(this, '${streamName}')">
+                <div class="video-info">
+                    <div class="video-title">${streamName}</div>
+                    <div class="video-status">
+                        <span class="status-dot"></span>
+                        <span id="status-${streamName}">Live</span>
+                    </div>
+                </div>
+            `;
+
+            grid.appendChild(card);
+        }
+
+        function handleImageError(img, streamName) {
+            const statusElem = document.getElementById(`status-${streamName}`);
+            if (statusElem) {
+                statusElem.textContent = 'Offline';
+                statusElem.previousElementSibling.style.background = '#f44336';
+            }
+        }
+
+        async function loadStreams() {
+            const serverUrl = getServerUrl();
+            try {
+                const response = await fetch(`${serverUrl}/api/streams`);
+                if (!response.ok) throw new Error('Failed to fetch streams');
+
+                const data = await response.json();
+                const grid = document.getElementById('videoGrid');
+                grid.innerHTML = '';
+                streams.clear();
+
+                if (data.streams.length === 0) {
+                    grid.innerHTML = '<p style="color: white; text-align: center; grid-column: 1/-1;">No active streams found</p>';
+                    return;
+                }
+
+                data.streams.forEach(stream => {
+                    createStreamCard(stream.name);
+                });
+            } catch (error) {
+                showError(`Error loading streams: ${error.message}`);
+            }
+        }
+
+        // Load streams on page load
+        window.addEventListener('load', () => {
+            loadStreams();
+        });
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadStreams, 30000);
+    </script>
+</body>
+</html>
