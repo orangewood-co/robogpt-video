@@ -7,6 +7,7 @@ import logging
 import threading
 import queue
 import time
+import random
 from typing import Optional
 import numpy as np
 
@@ -95,11 +96,11 @@ class StreamPublisher:
             queue_size = self.frame_queue.qsize()
             queue_utilization = queue_size / self.max_queue_size
 
-            # Skip frames if queue is filling up (>70% full)
-            if queue_utilization > 0.7:
+            # Skip frames if queue is filling up (>60% full)
+            if queue_utilization > 0.6:
                 # Skip frame probabilistically based on queue fullness
-                skip_probability = (queue_utilization - 0.7) / 0.3  # 0 to 1 as queue fills
-                if time.time() % 1.0 < skip_probability:
+                skip_probability = (queue_utilization - 0.6) / 0.4  # 0 to 1 as queue fills
+                if random.random() < skip_probability:
                     self.skipped_frames += 1
                     if self.skipped_frames % 10 == 0:  # Log every 10 skips
                         logger.debug(f"Skipping frame (queue {queue_utilization:.0%} full, "
@@ -182,12 +183,16 @@ class StreamPublisher:
         queue_size = self.frame_queue.qsize()
         queue_utilization = queue_size / self.max_queue_size
 
-        # If sending is slow and queue is building up, reduce quality
-        if avg_send_time > 0.5 and queue_utilization > 0.5:
-            self.quality = max(50, self.quality - 5)
-            logger.info(f"Reducing quality to {self.quality} (avg send time: {avg_send_time:.2f}s)")
-        # If sending is fast and queue is empty, increase quality back to base
-        elif avg_send_time < 0.2 and queue_utilization < 0.3 and self.quality < self.base_quality:
+        # Dynamic threshold based on target FPS
+        target_frame_time = 1.0 / self.max_fps  # ~67ms for 15 FPS
+
+        # Reduce quality if queue is building up OR send time exceeds 2x target
+        if queue_utilization > 0.6 or avg_send_time > target_frame_time * 2:
+            reduction = 10 if queue_utilization > 0.8 else 5  # Aggressive if critical
+            self.quality = max(40, self.quality - reduction)  # Allow lower min quality
+            logger.info(f"Reducing quality to {self.quality} (queue: {queue_utilization:.0%}, send: {avg_send_time:.2f}s)")
+        # Increase only when queue is low AND send time is fast
+        elif avg_send_time < target_frame_time and queue_utilization < 0.3 and self.quality < self.base_quality:
             self.quality = min(self.base_quality, self.quality + 5)
             logger.info(f"Increasing quality to {self.quality}")
 
@@ -202,10 +207,10 @@ class StreamPublisher:
                 # Get frame from queue with timeout
                 frame = self.frame_queue.get(timeout=1)
 
-                # Adaptive quality control every 30 frames
+                # Adaptive quality control every 10 frames (~667ms at 15 FPS)
                 if self.adaptive:
                     frames_since_adapt += 1
-                    if frames_since_adapt >= 30:
+                    if frames_since_adapt >= 10:
                         self._adapt_quality()
                         frames_since_adapt = 0
 
