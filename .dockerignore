@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Git
+.git/
+.gitignore
+
+# Application data (mounted as volumes)
+logs/*.log
+recordings/*.mp4
+recordings/*.avi
+recordings/*.json
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation and tests
+README.md
+test_setup.py
+viewer.html
+
+# Keep structure files
+!logs/.gitkeep
+!recordings/.gitkeep

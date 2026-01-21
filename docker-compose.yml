@@ -1,11 +1,62 @@
 version: '3.8'
 
 services:
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "80:80"
+      - "443:443"
+    command:
+      # Traefik configuration
+      - "--api.dashboard=true"
+      - "--api.insecure=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=traefik-network"
+
+      # Entrypoints
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+
+      # HTTP to HTTPS redirect
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+
+      # Let's Encrypt configuration
+      - "--certificatesresolvers.letsencrypt.acme.email=admin@orangewood.co"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+
+      # Logging
+      - "--log.level=INFO"
+      - "--accesslog=true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/letsencrypt:/letsencrypt
+      - ./traefik/logs:/logs
+    networks:
+      - traefik-network
+    labels:
+      # Traefik dashboard (optional - remove if you don't want dashboard access)
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.robogpt.infra.orangewood.co`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      # Basic auth for dashboard (username: admin, password: change_me)
+      # Generate new password with: echo $(htpasswd -nb admin your_password) | sed -e s/\\$/\\$\\$/g
+      - "traefik.http.routers.dashboard.middlewares=dashboard-auth"
+      - "traefik.http.middlewares.dashboard-auth.basicauth.users=admin:$$apr1$$8evjO7cX$$qZ7Xj9F5Y.xCZ5R9Z5R9Z0"
+
   video-server:
     build: .
     container_name: robogpt-video
-    ports:
-      - "5000:5000"
+    restart: unless-stopped
     volumes:
       - ./recordings:/app/recordings
       - ./logs:/app/logs
@@ -15,10 +66,34 @@ services:
       - STREAM_TIMEOUT_SECONDS=300
       - MAX_CONCURRENT_STREAMS=50
       - RECORDING_RETENTION_DAYS=7
-    restart: unless-stopped
+    networks:
+      - traefik-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5000/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+    labels:
+      - "traefik.enable=true"
+
+      # HTTP Router
+      - "traefik.http.routers.video-server.rule=Host(`video.robogpt.infra.orangewood.co`)"
+      - "traefik.http.routers.video-server.entrypoints=websecure"
+      - "traefik.http.routers.video-server.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.video-server.service=video-server"
+
+      # Service
+      - "traefik.http.services.video-server.loadbalancer.server.port=5000"
+
+      # Middleware for CORS and Headers (optional)
+      - "traefik.http.routers.video-server.middlewares=video-headers"
+      - "traefik.http.middlewares.video-headers.headers.accesscontrolallowmethods=GET,POST,DELETE,OPTIONS"
+      - "traefik.http.middlewares.video-headers.headers.accesscontrolalloworiginlist=*"
+      - "traefik.http.middlewares.video-headers.headers.accesscontrolmaxage=100"
+      - "traefik.http.middlewares.video-headers.headers.addvaryheader=true"
+
+networks:
+  traefik-network:
+    name: traefik-network
+    driver: bridge

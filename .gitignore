@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Application
+logs/*.log
+logs/*
+!logs/.gitkeep
+recordings/*
+!recordings/.gitkeep
+*.mp4
+*.avi
+
+# Traefik
+traefik/letsencrypt/*
+!traefik/letsencrypt/.gitkeep
+traefik/logs/*
+!traefik/logs/.gitkeep
+
+# Configuration (optional - uncomment if you want to ignore local config)
+# config.yaml
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
